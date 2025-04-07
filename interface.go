@@ -41,4 +41,7 @@ type PeerHandlerI interface {
 	HandleTransaction(msg *wire.MsgTx, peer PeerI) error
 	HandleBlockAnnouncement(msg *wire.InvVect, peer PeerI) error
 	HandleBlock(msg wire.Message, peer PeerI) error
+	HandleHeaders(msg *wire.MsgHeaders, peer PeerI) error
+	HandleVersion(msg *wire.MsgVersion, peer PeerI) error
+	HandleAddresses(msg *wire.MsgAddr, peer PeerI) error
 }
