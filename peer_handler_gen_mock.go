@@ -49,6 +49,8 @@ type PeerHandlerIMock struct {
 	// HandleBlockFunc mocks the HandleBlock method.
 	HandleBlockFunc func(msg wire.Message, peer PeerI) error
 
+
+
 	// HandleBlockAnnouncementFunc mocks the HandleBlockAnnouncement method.
 	HandleBlockAnnouncementFunc func(msg *wire.InvVect, peer PeerI) error
 
@@ -66,6 +68,9 @@ type PeerHandlerIMock struct {
 
 	// HandleTransactionsGetFunc mocks the HandleTransactionsGet method.
 	HandleTransactionsGetFunc func(msgs []*wire.InvVect, peer PeerI) ([][]byte, error)
+
+	// HandleHeadersFunc mocks the HandleHeaders method.
+	HandleHeadersFunc func(msg *wire.MsgHeaders, peer PeerI) error
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -118,6 +123,13 @@ type PeerHandlerIMock struct {
 			// Peer is the peer argument value.
 			Peer PeerI
 		}
+		// HandleHeaders holds details about calls to the HandleHeaders method.
+		HandleHeaders []struct {
+			// Msg is the msg argument value.
+			Msg *wire.MsgHeaders
+			// Peer is the peer argument value.
+			Peer PeerI
+		}
 	}
 	lockHandleBlock                   sync.RWMutex
 	lockHandleBlockAnnouncement       sync.RWMutex
@@ -126,6 +138,16 @@ type PeerHandlerIMock struct {
 	lockHandleTransactionRejection    sync.RWMutex
 	lockHandleTransactionSent         sync.RWMutex
 	lockHandleTransactionsGet         sync.RWMutex
+	lockHandleHeaders                 sync.RWMutex
+}
+
+func (s *PeerHandlerIMock) HandleAddresses(msg *wire.MsgAddr, peer PeerI) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *PeerHandlerIMock) HandleVersion(msg *wire.MsgVersion, peer PeerI) error {
+	return nil
 }
 
 // HandleBlock calls HandleBlockFunc.
@@ -377,5 +399,41 @@ func (mock *PeerHandlerIMock) HandleTransactionsGetCalls() []struct {
 	mock.lockHandleTransactionsGet.RLock()
 	calls = mock.calls.HandleTransactionsGet
 	mock.lockHandleTransactionsGet.RUnlock()
+	return calls
+}
+
+// HandleHeaders calls HandleHeadersFunc.
+func (mock *PeerHandlerIMock) HandleHeaders(msg *wire.MsgHeaders, peer PeerI) error {
+	if mock.HandleHeadersFunc == nil {
+		panic("PeerHandlerIMock.HandleHeadersFunc: method is nil but PeerHandlerI.HandleHeaders was just called")
+	}
+	callInfo := struct {
+		Msg  *wire.MsgHeaders
+		Peer PeerI
+	}{
+		Msg:  msg,
+		Peer: peer,
+	}
+	mock.lockHandleHeaders.Lock()
+	mock.calls.HandleHeaders = append(mock.calls.HandleHeaders, callInfo)
+	mock.lockHandleHeaders.Unlock()
+	return mock.HandleHeadersFunc(msg, peer)
+}
+
+// HandleHeadersCalls gets all the calls that were made to HandleHeaders.
+// Check the length with:
+//
+//	len(mockedPeerHandlerI.HandleHeadersCalls())
+func (mock *PeerHandlerIMock) HandleHeadersCalls() []struct {
+	Msg  *wire.MsgHeaders
+	Peer PeerI
+} {
+	var calls []struct {
+		Msg  *wire.MsgHeaders
+		Peer PeerI
+	}
+	mock.lockHandleHeaders.RLock()
+	calls = mock.calls.HandleHeaders
+	mock.lockHandleHeaders.RUnlock()
 	return calls
 }
