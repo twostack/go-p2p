@@ -57,6 +57,7 @@ type Block struct {
 
 type Peer struct {
 	address                       string
+	lastBlock                     int
 	network                       wire.BitcoinNet
 	mu                            sync.RWMutex
 	readConn                      net.Conn
@@ -96,18 +97,20 @@ type Peer struct {
 }
 
 // NewPeer returns a new bitcoin peer for the provided address and configuration.
-func NewPeer(logger *slog.Logger, address string, peerHandler PeerHandlerI, network wire.BitcoinNet, options ...PeerOptions) (*Peer, error) {
+func NewPeer(logger *slog.Logger, address string, lastBlock int, peerHandler PeerHandlerI, network wire.BitcoinNet, options ...PeerOptions) (*Peer, error) {
 	writeChan := make(chan wire.Message, 10000)
 
 	peerLogger := logger.With(
 		slog.Group("peer",
 			slog.String("network", network.String()),
 			slog.String("address", address),
+			slog.Int("address", lastBlock),
 		),
 	)
 
 	p := &Peer{
 		network:                       network,
+		lastBlock:                     lastBlock,
 		address:                       address,
 		writeChan:                     writeChan,
 		pingPongAlive:                 make(chan struct{}, 1),
@@ -447,6 +450,11 @@ func (p *Peer) startReadHandler(ctx context.Context) {
 						continue
 					}
 
+					versionMsg := msg.(*wire.MsgVersion)
+					if err = p.peerHandler.HandleVersion(versionMsg, p); err != nil {
+						commandLogger.Error("HandlerVersion returned an error.", slog.String(errKey, err.Error()))
+					}
+
 					verackMsg := wire.NewMsgVerAck()
 					if err = wire.WriteMessage(readConn, verackMsg, wire.ProtocolVersion, p.network); err != nil {
 						commandLogger.Error("failed to write message", slog.String(errKey, err.Error()))
@@ -506,6 +514,26 @@ func (p *Peer) startReadHandler(ctx context.Context) {
 					commandLogger.Debug(receivedMsg, slog.String(hashKey, txMsg.TxHash().String()), slog.Int("size", txMsg.SerializeSize()))
 					if err = p.peerHandler.HandleTransaction(txMsg, p); err != nil {
 						commandLogger.Error("Unable to process tx", slog.String(hashKey, txMsg.TxHash().String()), slog.String(errKey, err.Error()))
+					}
+
+				case wire.CmdHeaders:
+					msgHeaders, ok := msg.(*wire.MsgHeaders)
+					if !ok {
+						continue
+					}
+
+					if err = p.peerHandler.HandleHeaders(msgHeaders, p); err != nil {
+						commandLogger.Error("Unable to process headers", slog.String(errKey, err.Error()))
+					}
+
+				case wire.CmdAddr:
+					msgAddress, ok := msg.(*wire.MsgAddr )
+					if !ok {
+						continue
+					}
+
+					if err = p.peerHandler.HandleAddresses(msgAddress, p); err != nil {
+						commandLogger.Error("Unable to process headers", slog.String(errKey, err.Error()))
 					}
 
 				case wire.CmdBlock:
@@ -763,7 +791,6 @@ func (p *Peer) startWriteChannelHandler(ctx context.Context, instance int) {
 }
 
 func (p *Peer) versionMessage(address string) *wire.MsgVersion {
-	lastBlock := int32(0)
 
 	tcpAddrMe := &net.TCPAddr{IP: nil, Port: 0}
 	me := wire.NewNetAddress(tcpAddrMe, wire.SFNodeNetwork)
@@ -786,7 +813,7 @@ func (p *Peer) versionMessage(address string) *wire.MsgVersion {
 		p.logger.Error("RandomUint64: failed to generate nonce", slog.String(errKey, err.Error()))
 	}
 
-	msg := wire.NewMsgVersion(me, you, nonce, lastBlock)
+	msg := wire.NewMsgVersion(me, you, nonce, int32(p.lastBlock))
 
 	if p.userAgentName != nil && p.userAgentVersion != nil {
 		err = msg.AddUserAgent(*p.userAgentName, *p.userAgentVersion)

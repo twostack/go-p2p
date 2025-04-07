@@ -234,7 +234,7 @@ func NewMsgVersion(me *NetAddress, you *NetAddress, nonce uint64,
 		Nonce:           nonce,
 		UserAgent:       DefaultUserAgent,
 		LastBlock:       lastBlock,
-		DisableRelayTx:  false,
+		DisableRelayTx:  true,
 	}
 }
 
